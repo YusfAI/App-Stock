@@ -1,9 +1,16 @@
 <?php
 // ====== DB CONFIG ======
-$DB_HOST = '127.0.0.1';
-$DB_NAME = 'el_buteur';
-$DB_USER = 'root';
-$DB_PASS = ''; // ← adapte selon ta machine
+// Override with environment variables in production (never commit real passwords).
+$DB_HOST = getenv('DB_HOST') ?: '127.0.0.1';
+$DB_NAME = getenv('DB_NAME') ?: 'el_buteur';
+$DB_USER = getenv('DB_USER') ?: 'root';
+$DB_PASS = getenv('DB_PASS') ?: ''; // XAMPP default: empty password
+
+// ====== BUSINESS SETTINGS ======
+// Cash available before the first purchase/sale was recorded in the app (TND).
+const INITIAL_CAPITAL = 862;
+// Aramex deliveries made before the app was used, excluded from the delivery counter.
+const ARAMEX_COUNTER_OFFSET = 4;
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -107,7 +114,7 @@ $stmt = $pdo->query("
 $prevWeekAramex = $stmt->fetch()['total'] ?? 0;
 
 // ===== NEW KPI: All-time Aramex sales counter
-$stmt = $pdo->query("SELECT COUNT(*)-4 AS c FROM sales WHERE shipping_method = 'Aramex'");
+$stmt = $pdo->query("SELECT GREATEST(COUNT(*) - ".ARAMEX_COUNTER_OFFSET.", 0) AS c FROM sales WHERE shipping_method = 'Aramex'");
 $aramexCounter = $stmt->fetch()['c'] ?? 0;
         
         // Get total spending (sum of all supplier purchases)
@@ -121,7 +128,7 @@ $aramexCounter = $stmt->fetch()['c'] ?? 0;
         $netProfit = $stmt->fetch()['total_profit'] ?? 0;
         
         // FIXED: Calculate current money as total revenue minus total spending
-        $currentMoney = 862 + $totalRevenue - $totalSpending  ;
+        $currentMoney = INITIAL_CAPITAL + $totalRevenue - $totalSpending;
         
         // MODIFIED: Get recent sales with phone number included
         $stmt = $pdo->query("SELECT s.*, CONCAT(customer_firstname, ' ', customer_lastname) as customer 
@@ -370,7 +377,7 @@ $aramexCounter = $stmt->fetch()['c'] ?? 0;
           /* ======================= MONTHLY KPIS ======================= */
     case 'monthly_kpis':
       if ($method === 'GET') {
-        $stmt = $pdo->query("SELECT * FROM monthly_kpis ORDER BY month_year ");
+        $stmt = $pdo->query("SELECT * FROM monthly_kpis ORDER BY id");
         echo json_encode($stmt->fetchAll());
         exit;
       }
@@ -389,37 +396,34 @@ $aramexCounter = $stmt->fetch()['c'] ?? 0;
           }
         }
 
-        // Check if entry already exists for this month
+        $values = [
+          $in['sales_count'], $in['delivery_count'], $in['products_count'],
+          $in['total_revenue'], $in['net_profit'], $in['monthly_profit'],
+          $in['total_spending'], $in['current_money'],
+        ];
+
+        // One row per month: the dashboard asks the user before overwriting, so update if it exists
         $stmt = $pdo->prepare("SELECT id FROM monthly_kpis WHERE month_year = ?");
         $stmt->execute([$in['month_year']]);
         $existing = $stmt->fetch();
 
         if ($existing) {
-          http_response_code(409);
-          echo json_encode(['error' => 'Entry already exists for this month']);
-          exit;
+          $stmt = $pdo->prepare("UPDATE monthly_kpis SET
+            sales_count = ?, delivery_count = ?, products_count = ?, total_revenue = ?,
+            net_profit = ?, monthly_profit = ?, total_spending = ?, current_money = ?
+            WHERE id = ?");
+          $stmt->execute([...$values, $existing['id']]);
+          $id = (int)$existing['id'];
+        } else {
+          $stmt = $pdo->prepare("INSERT INTO monthly_kpis
+            (month_year, sales_count, delivery_count, products_count, total_revenue,
+             net_profit, monthly_profit, total_spending, current_money)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+          $stmt->execute([$in['month_year'], ...$values]);
+          $id = (int)$pdo->lastInsertId();
         }
 
-        // Insert new monthly KPI
-        $stmt = $pdo->prepare("INSERT INTO monthly_kpis 
-          (month_year, sales_count, delivery_count, products_count, total_revenue, 
-           net_profit, monthly_profit, total_spending, current_money) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        
-        $stmt->execute([
-          $in['month_year'],
-          $in['sales_count'],
-          $in['delivery_count'],
-          $in['products_count'],
-          $in['total_revenue'],
-          $in['net_profit'],
-          $in['monthly_profit'],
-          $in['total_spending'],
-          $in['current_money']
-        ]);
-
-        $id = (int)$pdo->lastInsertId();
-        $row = $pdo->query("SELECT * FROM monthly_kpis WHERE id = $id order by month_year"  )->fetch();
+        $row = $pdo->query("SELECT * FROM monthly_kpis WHERE id = $id")->fetch();
         echo json_encode($row);
         exit;
       }
