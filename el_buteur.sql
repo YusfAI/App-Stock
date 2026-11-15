@@ -104,7 +104,7 @@ CREATE TABLE `sales` (
 --
 
 INSERT INTO `sales` (`sale_id`, `customer_firstname`, `customer_lastname`, `phone`, `address`, `product_id`, `product_name`, `size`, `quantity`, `buy_price`, `sell_price`, `sale_date`, `shipping_method`, `notes`) VALUES
-(9, 'Rayen', 'Ebdilli', '95 690 207', 'hay tadhamon', 34, 'Chelsea 24/25 (L) - TND 60.00', 'L', 1, 35.00, 60.00, '2025-08-30', 'Aramex', 'impression Ebdilli 10');
+(9, 'Demo', 'Customer', '00 000 000', 'Tunis', 34, 'Chelsea 24/25 (L) - TND 60.00', 'L', 1, 35.00, 60.00, '2025-08-30', 'Aramex', 'Name printing');
 
 -- --------------------------------------------------------
 
@@ -126,6 +126,27 @@ CREATE TABLE `suppliers` (
   `payment_method` enum('Cash','Card','Transfer') NOT NULL,
   `quantity` int(11) NOT NULL,
   `total_price` decimal(10,2) GENERATED ALWAYS AS (`buy_price` * `quantity`) STORED
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `monthly_kpis`
+-- (one snapshot of the dashboard KPIs per month, saved from the "Monthly Calculations" page)
+--
+
+CREATE TABLE `monthly_kpis` (
+  `id` int(11) NOT NULL,
+  `month_year` varchar(20) NOT NULL,
+  `sales_count` int(11) NOT NULL DEFAULT 0,
+  `delivery_count` int(11) NOT NULL DEFAULT 0,
+  `products_count` int(11) NOT NULL DEFAULT 0,
+  `total_revenue` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `net_profit` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `monthly_profit` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `total_spending` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `current_money` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -152,6 +173,13 @@ ALTER TABLE `suppliers`
   ADD PRIMARY KEY (`id_supp`);
 
 --
+-- Indexes for table `monthly_kpis`
+--
+ALTER TABLE `monthly_kpis`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `month_year` (`month_year`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -172,6 +200,12 @@ ALTER TABLE `sales`
 --
 ALTER TABLE `suppliers`
   MODIFY `id_supp` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
+-- AUTO_INCREMENT for table `monthly_kpis`
+--
+ALTER TABLE `monthly_kpis`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- Constraints for dumped tables
